@@ -27,6 +27,39 @@ $config = parse_ini_file ('../replica.my.cnf', true);
 $toolserver_username = trim ($config ['client'] ['user'], "'");
 $toolserver_password = trim ($config ['client'] ['password'], "'");
 
+function register_article_error($article, $type, $parameter) {
+    global $ArticleErrors;
+
+    if (!array_key_exists ($article, $ArticleErrors)) {
+        $ArticleErrors [$article] = array();
+    }
+    if (!array_key_exists ($type, $ArticleErrors [$article])) {
+        $ArticleErrors [$article] [$type] = array();
+    }
+    if (!array_key_exists ($parameter, $ArticleErrors [$article] [$type])) {
+        $ArticleErrors [$article] [$type] [$parameter] = 0;
+    }
+    $ArticleErrors [$article] [$type] [$parameter]++;
+}
+
+function register_article_error_value($article, $type, $parameter, $value) {
+    global $ArticleErrors;
+
+    if (!array_key_exists ($article, $ArticleErrors)) {
+        $ArticleErrors [$article] = array();
+    }
+    if (!array_key_exists ($type, $ArticleErrors [$article])) {
+        $ArticleErrors [$article] [$type] = array();
+    }
+    if (!array_key_exists ($parameter, $ArticleErrors [$article] [$type])) {
+        $ArticleErrors [$article] [$type] [$parameter] = array();
+    }
+    if (!array_key_exists ($value, $ArticleErrors [$article] [$type] [$parameter])) {
+        $ArticleErrors [$article] [$type] [$parameter] [$value] = array();
+    }
+    $ArticleErrors [$article] [$type] [$parameter] [$value]++;
+}
+
 // http://php.net/manual/en/function.urlencode.php
 // 9:40 tal
 if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft werden!
@@ -38,7 +71,7 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
     $Parameters = array ();
     ini_set ("user_agent", "templatecheck 0.1 (http://toolserver.org/~timl/templatecheck.php)");
     $xml = simplexml_load_file ("http://de.wikipedia.org/w/index.php?title=Template:" . urlencode ($_GET ["template"]) . "/XML&action=raw") or die ("Couldn't read XML");
-    if (!$_GET ["wikiformat"])
+    if (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"])
       {
         header ("Content-Type: text/html; charset=utf8");
         echo ("<html>\n");
@@ -66,7 +99,7 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
                                        "WHERE dewiki.name = t2.name AND " .
                                        "dewiki.tp_name = t2.tp_name AND t2.entry_name = '" . mysql_escape_string ($p ['name']) . "'))") or die (mysql_error ());
                 while ($r = mysql_fetch_row ($result))
-                  $ArticleErrors [$r [0]] ['notnull'] [(string) $p ['name']] = 1;
+                  register_article_error($r [0], 'notnull', (string) $p ['name']);
               }
             if (isset ($p->Value))
               {
@@ -78,33 +111,33 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
                                        "entry_name = '" . mysql_escape_string ($p ['name']) . "' AND " .
                                        "REPLACE(Value, ' ', '') <> '' AND Value NOT IN (" . join (', ', $LegalValues) . ')') or die (mysql_error ());
                 while ($r = mysql_fetch_row ($result))
-                  $ArticleErrors [$r [0]] ['values'] [(string) $p ['name']] [$r [1]]++;
+                  register_article_error_value($r [0], 'values', (string) $p ['name'], $r [1]);
               }
             if (isset ($p->Condition))
               {
                 $result = mysql_query ("SELECT DISTINCT name, Value FROM dewiki WHERE tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND entry_name = '" . mysql_escape_string ($p ['name']) . "' AND REPLACE(Value, ' ', '') <> '' AND Value NOT REGEXP (REPLACE (REPLACE (REPLACE ('" . mysql_escape_string ($p->Condition) . "', '[\\\\d]', '[0-9]'), '\\\\d', '[0-9]'), '*?', '*'))") or die (mysql_error ());
                 while ($r = mysql_fetch_row ($result))
-                  $ArticleErrors [$r [0]] ['conds'] [(string) $p ['name']] [$r [1]]++;
+                  register_article_error_value($r [0], 'conds', (string) $p ['name'], $r [1]);
               }
             $Parameters [] = mysql_escape_string ($p ['name']);
           }
       }
     $result = mysql_query ("SELECT DISTINCT name, entry_name FROM dewiki WHERE tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND entry_name NOT IN ('" . join ("', '", $Parameters) . "')") or die (mysql_error ());
     while ($r = mysql_fetch_row ($result))
-      $ArticleErrors [$r [0]] ['unknown'] [$r [1]]++;
+      register_article_error($r [0], 'unknown', $r [1]);
     ksort ($ArticleErrors);
     foreach ($ArticleErrors as $Article => &$Value)
       {
-        echo (!$_GET ["wikiformat"] ? ("<li><a href=\"http://de.wikipedia.org/wiki/" . htmlspecialchars ($Article) . "\">" . htmlspecialchars ($Article) . "</a>:\n  <ul>\n") : ("* [[" . $Article . "]]:\n"));
+        echo (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? ("<li><a href=\"http://de.wikipedia.org/wiki/" . htmlspecialchars ($Article) . "\">" . htmlspecialchars ($Article) . "</a>:\n  <ul>\n") : ("* [[" . $Article . "]]:\n"));
         if (isset ($Value ['unknown']))   // Unbekannte Parameter
           {
             ksort ($Value ['unknown']);
-            echo ((!$_GET ["wikiformat"] ? "<li>" : "** ") . "Unbekannte Parameter: " . join (', ', array_keys ($Value ['unknown'])) . (!$_GET ["wikiformat"] ? "</li>\n" : "\n"));
+            echo ((!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "<li>" : "** ") . "Unbekannte Parameter: " . join (', ', array_keys ($Value ['unknown'])) . (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "</li>\n" : "\n"));
           }
         if (isset ($Value ['notnull']))   // Leerer/nicht vorhandene Parameter
           {
             ksort ($Value ['notnull']);
-            echo ((!$_GET ["wikiformat"] ? "<li>" : "** ") . "Leerer/nicht vorhandener Parameter: " . join (', ', array_keys ($Value ['notnull'])) . (!$_GET ["wikiformat"] ? "</li>\n" : "\n"));
+            echo ((!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "<li>" : "** ") . "Leerer/nicht vorhandener Parameter: " . join (', ', array_keys ($Value ['notnull'])) . (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "</li>\n" : "\n"));
           }
         if (isset ($Value ['values']))   // Unbekannte Parameter
           {
@@ -117,7 +150,7 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
                 ksort ($v1);
                 $list .= $k1 . ' (' . join (', ', array_keys ($v1)) . ')';
               }
-            echo ((!$_GET ["wikiformat"] ? "<li>" : "** ") . "Nicht erlaubter Parameter (Auswahlliste): " . $list . (!$_GET ["wikiformat"] ? "</li>\n" : "\n"));
+            echo ((!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "<li>" : "** ") . "Nicht erlaubter Parameter (Auswahlliste): " . $list . (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "</li>\n" : "\n"));
           }
         if (isset ($Value ['conds']))   // Unbekannte Parameter
           {
@@ -130,11 +163,11 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
                 ksort ($v1);
                 $list .= $k1 . ' (' . join (', ', array_keys ($v1)) . ')';
               }
-            echo ((!$_GET ["wikiformat"] ? "<li>" : "** ") . "Nicht erlaubter Parameter (regulärer Ausdruck): " . $list . (!$_GET ["wikiformat"] ? "</li>\n" : "\n"));
+            echo ((!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "<li>" : "** ") . "Nicht erlaubter Parameter (regulärer Ausdruck): " . $list . (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? "</li>\n" : "\n"));
           }
-        echo (!$_GET ["wikiformat"] ? ("  </ul>\n") : (""));
+        echo (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"] ? ("  </ul>\n") : (""));
       }
-    if (!$_GET ["wikiformat"])
+    if (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"])
       {
         echo ("    </ul>\n");
         echo ("    <p>Fertig.</p>\n");
