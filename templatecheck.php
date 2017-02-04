@@ -2,7 +2,7 @@
 
 /**
  *  templatecheck -- tool to validate template invocations
- *  Copyright (C) 2015 Tim Landscheidt
+ *  Copyright (C) 2015, 2017 Tim Landscheidt
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -69,7 +69,7 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
 
     $ArticleErrors = array ();
     $Parameters = array ();
-    ini_set ("user_agent", "templatecheck 0.1 (http://toolserver.org/~timl/templatecheck.php)");
+    ini_set ("user_agent", "templatecheck 0.1 (https://tools.wmflabs.org/templatecheck/)");
     $xml = simplexml_load_file ("http://de.wikipedia.org/w/index.php?title=Template:" . urlencode ($_GET ["template"]) . "/XML&action=raw") or die ("Couldn't read XML");
     if (!array_key_exists('wikiformat', $_GET) || !$_GET ["wikiformat"])
       {
