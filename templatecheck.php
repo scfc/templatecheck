@@ -64,8 +64,15 @@ function register_article_error_value($article, $type, $parameter, $value) {
 // 9:40 tal
 if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft werden!
   {
-    mysql_connect ('tools.labsdb', $db_username, $db_password) or die (mysql_error ());
-    mysql_select_db ('s51071__templatetiger_p') or die (mysql_error ());
+    try
+      {
+        $db = new PDO ('mysql:host=tools.labsdb;dbname=s51071__templatetiger_p', $db_username, $db_password);
+      }
+    catch (PDOException $e)
+      {
+        echo ("Error: " . $e->getMessage ());
+        die ();
+      }
 
     $ArticleErrors = array ();
     $Parameters = array ();
@@ -92,38 +99,34 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
           {
             if ($p ['null'] == 'false')
               {
-                $result = mysql_query ("SELECT DISTINCT name FROM dewiki WHERE " .
-                                       "tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND " .
-                                       "(entry_name = '" . mysql_escape_string ($p ['name']) . "' AND REPLACE(Value, ' ', '') = '' OR " .
-                                       "NOT EXISTS (SELECT 't' FROM dewiki AS t2 " .
-                                       "WHERE dewiki.name = t2.name AND " .
-                                       "dewiki.tp_name = t2.tp_name AND t2.entry_name = '" . mysql_escape_string ($p ['name']) . "'))") or die (mysql_error ());
-                while ($r = mysql_fetch_row ($result))
+                foreach ($db->query ("SELECT DISTINCT name FROM dewiki WHERE " .
+                                     "tp_name = " . $db->quote ($_GET ["template"]) . " AND " .
+                                     "(entry_name = " . $db->quote ($p ['name']) . " AND REPLACE(Value, ' ', '') = '' OR " .
+                                     "NOT EXISTS (SELECT 't' FROM dewiki AS t2 " .
+                                     "WHERE dewiki.name = t2.name AND " .
+                                     "dewiki.tp_name = t2.tp_name AND t2.entry_name = " . $db->quote ($p ['name']) . "))") as $r)
                   register_article_error($r [0], 'notnull', (string) $p ['name']);
               }
             if (isset ($p->Value))
               {
                 $LegalValues = array ();
                 foreach ($p->Value as $v)
-                  $LegalValues [] = "'" . mysql_escape_string ($v) . "'";
-                $result = mysql_query ("SELECT DISTINCT name, Value FROM dewiki WHERE " .
-                                       "tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND " .
-                                       "entry_name = '" . mysql_escape_string ($p ['name']) . "' AND " .
-                                       "REPLACE(Value, ' ', '') <> '' AND Value NOT IN (" . join (', ', $LegalValues) . ')') or die (mysql_error ());
-                while ($r = mysql_fetch_row ($result))
+                  $LegalValues [] = $db->quote ($v);
+               foreach ($db->query ("SELECT DISTINCT name, Value FROM dewiki WHERE " .
+                                    "tp_name = " . $db->quote ($_GET ["template"]) . " AND " .
+                                    "entry_name = " . $db->quote ($p ['name']) . " AND " .
+                                    "REPLACE(Value, ' ', '') <> '' AND Value NOT IN (" . join (', ', $LegalValues) . ')') as $r)
                   register_article_error_value($r [0], 'values', (string) $p ['name'], $r [1]);
               }
             if (isset ($p->Condition))
               {
-                $result = mysql_query ("SELECT DISTINCT name, Value FROM dewiki WHERE tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND entry_name = '" . mysql_escape_string ($p ['name']) . "' AND REPLACE(Value, ' ', '') <> '' AND Value NOT REGEXP (REPLACE (REPLACE (REPLACE ('" . mysql_escape_string ($p->Condition) . "', '[\\\\d]', '[0-9]'), '\\\\d', '[0-9]'), '*?', '*'))") or die (mysql_error ());
-                while ($r = mysql_fetch_row ($result))
+                foreach ($db->query ("SELECT DISTINCT name, Value FROM dewiki WHERE tp_name = " . $db->quote ($_GET ["template"]) . " AND entry_name = " . $db->quote ($p ['name']) . " AND REPLACE(Value, ' ', '') <> '' AND Value NOT REGEXP (REPLACE (REPLACE (REPLACE (" . $db->quote ($p->Condition) . ", '[\\\\d]', '[0-9]'), '\\\\d', '[0-9]'), '*?', '*'))") as $r)
                   register_article_error_value($r [0], 'conds', (string) $p ['name'], $r [1]);
               }
-            $Parameters [] = mysql_escape_string ($p ['name']);
+            $Parameters [] = $db->quote ($p ['name']);
           }
       }
-    $result = mysql_query ("SELECT DISTINCT name, entry_name FROM dewiki WHERE tp_name = '" . mysql_escape_string ($_GET ["template"]) . "' AND entry_name NOT IN ('" . join ("', '", $Parameters) . "')") or die (mysql_error ());
-    while ($r = mysql_fetch_row ($result))
+    foreach ($db->query ("SELECT DISTINCT name, entry_name FROM dewiki WHERE tp_name = " . $db->quote ($_GET ["template"]) . " AND entry_name NOT IN (" . join (', ', $Parameters) . ")") as $r)
       register_article_error($r [0], 'unknown', $r [1]);
     ksort ($ArticleErrors);
     foreach ($ArticleErrors as $Article => &$Value)
@@ -177,20 +180,23 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
   }
 else
   {
-    mysql_connect ('dewiki.labsdb', $db_username, $db_password) or die (mysql_error ());
-    mysql_select_db ('dewiki_p') or die (mysql_error ());
-    $query = "SELECT REPLACE(SUBSTRING(page_title FROM 1 FOR LENGTH(page_title) - 4), '_', ' ') AS Template FROM categorylinks JOIN page ON cl_from = page_id WHERE cl_to = 'Vorlage:für_Vorlagen-Meister' AND page_namespace = 10 ORDER BY page_title;";
-    $result = mysql_query ($query) or die (mysql_error ());
-
-    if (!$result)
-      die ("ERROR: No result returned." . mysql_error ());
-
+    try
+      {
+        $db = new PDO ('mysql:host=dewiki.labsdb;dbname=dewiki_p', $db_username, $db_password);
+      }
+    catch (PDOException $e)
+      {
+        echo ("Error: " . $e->getMessage ());
+        die ();
+      }
     header ("Content-Type: text/html; charset=utf8");
     echo ("<html><head><title>Vorlagenprüfung</title></head><body>\n");
     echo ("<form method=\"get\">\n");
     echo ("<select name=\"template\" size=\"1\">\n");
-    while ($row = mysql_fetch_assoc ($result))
-      echo ("<option>" . $row ['Template'] . "</option>\n");
+    foreach ($db->query ("SELECT REPLACE(SUBSTRING(page_title FROM 1 FOR LENGTH(page_title) - 4), '_', ' ') AS Template FROM categorylinks JOIN page ON cl_from = page_id WHERE cl_to = 'Vorlage:für_Vorlagen-Meister' AND page_namespace = 10 ORDER BY page_title;") as $row)
+      {
+        echo ("<option>" . $row ['Template'] . "</option>\n");
+      }
     echo ("</select>\n");
     echo ("<input type=\"checkbox\" name=\"wikiformat\"/> Wiki-Format\n");
     echo ("<input type=\"submit\"/>\n");
@@ -198,4 +204,4 @@ else
     echo ("</body></html>\n");
   }
 
-mysql_close ();
+$db = null;
