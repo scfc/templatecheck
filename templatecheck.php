@@ -24,8 +24,8 @@
 error_reporting (E_ALL);
 
 $config = parse_ini_file ('../replica.my.cnf', true);
-$toolserver_username = trim ($config ['client'] ['user'], "'");
-$toolserver_password = trim ($config ['client'] ['password'], "'");
+$db_username = trim ($config ['client'] ['user'], "'");
+$db_password = trim ($config ['client'] ['password'], "'");
 
 function register_article_error($article, $type, $parameter) {
     global $ArticleErrors;
@@ -64,7 +64,7 @@ function register_article_error_value($article, $type, $parameter, $value) {
 // 9:40 tal
 if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft werden!
   {
-    mysql_connect ('tools.labsdb', $toolserver_username, $toolserver_password) or die (mysql_error ());
+    mysql_connect ('tools.labsdb', $db_username, $db_password) or die (mysql_error ());
     mysql_select_db ('s51071__templatetiger_p') or die (mysql_error ());
 
     $ArticleErrors = array ();
@@ -177,7 +177,7 @@ if (isset ($_GET ["template"]))   // @@TODO@@ Müsste noch auf Sanity geprüft w
   }
 else
   {
-    mysql_connect ('dewiki.labsdb', $toolserver_username, $toolserver_password) or die (mysql_error ());
+    mysql_connect ('dewiki.labsdb', $db_username, $db_password) or die (mysql_error ());
     mysql_select_db ('dewiki_p') or die (mysql_error ());
     $query = "SELECT REPLACE(SUBSTRING(page_title FROM 1 FOR LENGTH(page_title) - 4), '_', ' ') AS Template FROM categorylinks JOIN page ON cl_from = page_id WHERE cl_to = 'Vorlage:für_Vorlagen-Meister' AND page_namespace = 10 ORDER BY page_title;";
     $result = mysql_query ($query) or die (mysql_error ());
